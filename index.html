@@ -1,0 +1,29 @@
+const { PlaidApi, PlaidEnvironments, Configuration } = require('plaid');
+
+const client = new PlaidApi(new Configuration({
+  basePath: PlaidEnvironments[process.env.PLAID_ENV || 'development'],
+  baseOptions: { headers: { 'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID, 'PLAID-SECRET': process.env.PLAID_SECRET } },
+}));
+
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  try {
+    const { access_token, cursor } = req.body;
+    let added = [], modified = [], removed = [], next_cursor = cursor;
+    let hasMore = true;
+    while (hasMore) {
+      const { data } = await client.transactionsSync({ access_token, cursor: next_cursor, count: 500 });
+      added    = added.concat(data.added);
+      modified = modified.concat(data.modified);
+      removed  = removed.concat(data.removed);
+      next_cursor = data.next_cursor;
+      hasMore  = data.has_more;
+    }
+    res.json({ added, modified, removed, next_cursor });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+};
